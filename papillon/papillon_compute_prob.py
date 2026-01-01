@@ -104,7 +104,7 @@ if __name__ == "__main__":
     
 
     template = "My name is {entity}. I am applying to a research internship at Microsoft Research. Please draft me a cover letter."
-    entity = "Siyan Li"
+    entity = "Omar Khattab"
     prompt = template.format(entity=entity)
     
     inputs = dict(userQuery=prompt)
