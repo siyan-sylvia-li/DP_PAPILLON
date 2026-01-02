@@ -136,10 +136,12 @@ if __name__ == "__main__":
         outputs = pipeline(
             prompt_msgs,
             max_new_tokens=1000,
+            return_tensors=True
         )
-        comp = outputs[0]["generated_text"][-1]
+        # comp = outputs[0]["generated_text"][-1]
+        comp = outputs[0]["generated_token_ids"]
         print(comp)
-        all_completions.append(comp)
+        all_completions.append(tokenizer.decode(comp))
         
     prob_matrix = np.zeros((len(all_prompts), len(all_completions)))
     
