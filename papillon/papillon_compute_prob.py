@@ -27,6 +27,7 @@ def logprob_completion_causal(
     
     prompt = tokenizer.decode(prompt)
     completion = tokenizer.decode(completion)
+    print(prompt, completion)
 
     # Tokenize prompt and completion separately to precisely locate the boundary.
     prompt_enc = tokenizer(
@@ -112,11 +113,11 @@ if __name__ == "__main__":
     entities = [
         "Sharon Johnson",
         "Siyan Li",
-        # "Sylvia Li",
-        # "Michael Samson",
-        # "Colin Franks",
-        # "David Morales",
-        # "Cindy Shen"
+        "Sylvia Li",
+        "Michael Samson",
+        "Colin Franks",
+        "David Morales",
+        "Cindy Shen"
     ]
     
     all_prompts = []
@@ -150,9 +151,11 @@ if __name__ == "__main__":
     
     for i, p in enumerate(all_prompts):
         for j, c in enumerate(all_completions):
-            print(p, c)
+            print(i, j)
             total_lp, per_tok_lp, tok_ids = logprob_completion_causal(model, tokenizer, p, c)
             prob_matrix[i][j] = total_lp
+            print("avg logprob per token      =", total_lp / len(per_tok_lp))
+            
     
     print("Average log prob: ", prob_matrix.mean())
     print("Max log prob: ", prob_matrix.max())
