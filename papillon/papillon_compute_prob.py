@@ -12,8 +12,8 @@ import numpy as np
 def logprob_completion_causal(
     model,
     tokenizer,
-    prompt: str,
-    completion: str,
+    prompt: list[int],
+    completion: list[int],
     *,
     add_special_tokens_to_prompt: bool = True,
 ):
@@ -24,6 +24,9 @@ def logprob_completion_causal(
       completion_token_ids: list[int]
     """
     model.eval()
+    
+    prompt = tokenizer.decode(prompt)
+    completion = tokenizer.decode(completion)
 
     # Tokenize prompt and completion separately to precisely locate the boundary.
     prompt_enc = tokenizer(
@@ -124,6 +127,7 @@ if __name__ == "__main__":
         inputs = dict(userQuery=prompt)
         adapter = ChatAdapter()
         prompt_msgs = adapter.format(priv_prompt.prompt_creater.signature, demos=[], inputs=inputs)
+        print(prompt_msgs)
         all_prompts.append(tokenizer.apply_chat_template(prompt_msgs))
         
         pipeline = transformers.pipeline(
@@ -136,17 +140,17 @@ if __name__ == "__main__":
         outputs = pipeline(
             prompt_msgs,
             max_new_tokens=1000,
-            return_tensors=True
         )
-        # comp = outputs[0]["generated_text"][-1]
-        comp = outputs[0]["generated_token_ids"]
+        comp = outputs[0]["generated_text"][-1]
+        # comp = outputs[0]["generated_token_ids"]
         print(comp)
-        all_completions.append(tokenizer.decode(comp))
+        all_completions.append(tokenizer.apply_chat_template(comp))
         
     prob_matrix = np.zeros((len(all_prompts), len(all_completions)))
     
     for i, p in enumerate(all_prompts):
         for j, c in enumerate(all_completions):
+            print(p, c)
             total_lp, per_tok_lp, tok_ids = logprob_completion_causal(model, tokenizer, p, c)
             prob_matrix[i][j] = total_lp
     
