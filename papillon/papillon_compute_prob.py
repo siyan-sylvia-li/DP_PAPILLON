@@ -141,7 +141,7 @@ if __name__ == "__main__":
             prompt_msgs,
             max_new_tokens=1000,
         )
-        comp = outputs[0]["generated_text"][-1]
+        comp = [outputs[0]["generated_text"][-1]]
         # comp = outputs[0]["generated_token_ids"]
         print(comp)
         all_completions.append(tokenizer.apply_chat_template(comp))
