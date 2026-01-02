@@ -6,6 +6,7 @@ import dspy
 from run_llama_dspy import PAPILLON
 from dspy.adapters import ChatAdapter
 import transformers
+import numpy as np
 
 @torch.no_grad()
 def logprob_completion_causal(
@@ -82,6 +83,7 @@ def logprob_completion_causal(
 # --- Example usage ---
 if __name__ == "__main__":
     model_name = "meta-llama/Llama-3.1-8B-Instruct"  # replace with your model
+    # model_name = "meta-llama/Llama-3.2-1B-Instruct"  # replace with your model
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
@@ -104,26 +106,53 @@ if __name__ == "__main__":
     
 
     template = "My name is {entity}. I am applying to a research internship at Microsoft Research. Please draft me a cover letter."
-    entity = "Omar Khattab"
-    prompt = template.format(entity=entity)
+    entities = [
+        "Sharon Johnson",
+        "Siyan Li",
+        # "Sylvia Li",
+        # "Michael Samson",
+        # "Colin Franks",
+        # "David Morales",
+        # "Cindy Shen"
+    ]
     
-    inputs = dict(userQuery=prompt)
-    adapter = ChatAdapter()
-    prompt_msgs = adapter.format(priv_prompt.prompt_creater.signature, demos=[], inputs=inputs)
-    
-    pipeline = transformers.pipeline(
-        "text-generation",
-        model=model_name,
-        model_kwargs={"torch_dtype": torch.bfloat16},
-        device_map="auto",
-    )
-
-    outputs = pipeline(
-        prompt_msgs,
-        max_new_tokens=1000,
-    )
-    print(outputs[0]["generated_text"][-1])
+    all_prompts = []
+    all_completions = []
+    for e in entities:
+        prompt = template.format(entity=e)
         
+        inputs = dict(userQuery=prompt)
+        adapter = ChatAdapter()
+        prompt_msgs = adapter.format(priv_prompt.prompt_creater.signature, demos=[], inputs=inputs)
+        all_prompts.append(tokenizer.apply_chat_template(prompt_msgs))
+        
+        pipeline = transformers.pipeline(
+            "text-generation",
+            model=model_name,
+            model_kwargs={"torch_dtype": torch.bfloat16},
+            device_map="auto",
+        )
+
+        outputs = pipeline(
+            prompt_msgs,
+            max_new_tokens=1000,
+        )
+        comp = outputs[0]["generated_text"][-1]
+        print(comp)
+        all_completions.append(comp)
+        
+    prob_matrix = np.zeros((len(all_prompts), len(all_completions)))
+    
+    for i, p in enumerate(all_prompts):
+        for j, c in enumerate(all_completions):
+            total_lp, per_tok_lp, tok_ids = logprob_completion_causal(model, tokenizer, p, c)
+            prob_matrix[i][j] = total_lp
+    
+    print("Average log prob: ", prob_matrix.mean())
+    print("Max log prob: ", prob_matrix.max())
+    print("Min log prob:", prob_matrix.min())
+            
+
         
             
 
