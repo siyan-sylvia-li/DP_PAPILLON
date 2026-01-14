@@ -1,5 +1,6 @@
 from datasets import load_dataset
 import json
+import ast
 
 if __name__ == "__main__":
     # Login using e.g. `huggingface-cli login` to access this dataset
@@ -8,8 +9,9 @@ if __name__ == "__main__":
     tags = {}
 
     for i, example in enumerate(ds):
-        for s in example["spans"]:
-            l = s["label"]
+        spans = ast.literal_eval(example["spans"])
+        for s in spans:
+            l = s['label']
             if l not in tags:
                 tags[l] = {}
             if i not in tags[l]:

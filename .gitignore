@@ -2,3 +2,4 @@
 /__pycache__/
 .env
 papillon/*.csv
+pupa_nemotron/*.json
