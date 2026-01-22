@@ -1,3 +1,4 @@
+import pandas
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -84,6 +85,65 @@ def logprob_completion_causal(
     return total_logprob, token_logprobs.detach().cpu().tolist(), comp_ids[0].cpu().tolist()
 
 
+def run_papillon(prompt):
+    inputs = dict(userQuery=prompt)
+    adapter = ChatAdapter()
+    prompt_msgs = adapter.format(priv_prompt.prompt_creater.signature, demos=[], inputs=inputs)
+    
+    pipeline = transformers.pipeline(
+        "text-generation",
+        model=model_name,
+        model_kwargs={"torch_dtype": torch.bfloat16},
+        device_map="auto",
+    )
+
+    outputs = pipeline(
+        prompt_msgs,
+        max_new_tokens=1000,
+    )
+    comp = [outputs[0]["generated_text"][-1]]
+    return tokenizer.apply_chat_template(prompt_msgs), tokenizer.apply_chat_template(comp)
+
+def completion_via_gliner():
+    gliner_replace_csv = pandas.read_csv("../pupa/PUPA_TNB_ENG_replace.csv")
+    original_queries = gliner_replace_csv["user_query"].tolist()
+    replaced_queries = gliner_replace_csv["gliner_replace"].tolist()
+    all_prompts = []
+    all_completions = []
+    for i in range(len(original_queries)):
+        orig = original_queries[i]
+        repls = replaced_queries[i].split("|<SEP>|")
+        curr_prompts, curr_completions = [], []
+        for r in [orig] + repls:
+            prompt, comp = run_papillon(r)
+            curr_prompts.append(prompt)
+            curr_completions.append(comp)
+        all_prompts.append(curr_prompts)
+        all_completions.append(curr_completions)
+    return all_prompts, all_completions
+
+def completion_via_templates():
+    template = "My name is {entity}. I am applying to a research internship at Microsoft Research. Please draft me a cover letter."
+    entities = [
+        "Sharon Johnson",
+        "Siyan Li",
+        "Sylvia Li",
+        "Michael Samson",
+        "Colin Franks",
+        "David Morales",
+        "Cindy Shen"
+    ]
+    
+    all_prompts = []
+    all_completions = []
+    for e in entities:
+        prompt = template.format(entity=e)
+        prompt, comp = run_papillon(prompt)
+        all_completions.append(comp)
+        all_prompts.append(prompt)
+        
+    return [all_prompts], [all_completions]
+
 # --- Example usage ---
 if __name__ == "__main__":
     model_name = "meta-llama/Llama-3.1-8B-Instruct"  # replace with your model
@@ -107,60 +167,29 @@ if __name__ == "__main__":
     priv_prompt = PAPILLON(openai_lm)
     
     priv_prompt.load(prompt_file, use_legacy_loading=True)
-    
 
-    template = "My name is {entity}. I am applying to a research internship at Microsoft Research. Please draft me a cover letter."
-    entities = [
-        "Sharon Johnson",
-        "Siyan Li",
-        "Sylvia Li",
-        "Michael Samson",
-        "Colin Franks",
-        "David Morales",
-        "Cindy Shen"
-    ]
+    USE_TEMPLATES = False
     
-    all_prompts = []
-    all_completions = []
-    for e in entities:
-        prompt = template.format(entity=e)
+    if USE_TEMPLATES:
+        all_prompts, all_completions = completion_via_templates()
+    else:
+        all_prompts, all_completions = completion_via_gliner()
         
-        inputs = dict(userQuery=prompt)
-        adapter = ChatAdapter()
-        prompt_msgs = adapter.format(priv_prompt.prompt_creater.signature, demos=[], inputs=inputs)
-        print(prompt_msgs)
-        all_prompts.append(tokenizer.apply_chat_template(prompt_msgs))
-        
-        pipeline = transformers.pipeline(
-            "text-generation",
-            model=model_name,
-            model_kwargs={"torch_dtype": torch.bfloat16},
-            device_map="auto",
-        )
-
-        outputs = pipeline(
-            prompt_msgs,
-            max_new_tokens=1000,
-        )
-        comp = [outputs[0]["generated_text"][-1]]
-        # comp = outputs[0]["generated_token_ids"]
-        print(comp)
-        all_completions.append(tokenizer.apply_chat_template(comp))
-        
-    prob_matrix = np.zeros((len(all_prompts), len(all_completions)))
     
-    for i, p in enumerate(all_prompts):
-        for j, c in enumerate(all_completions):
-            print(i, j)
-            total_lp, per_tok_lp, tok_ids = logprob_completion_causal(model, tokenizer, p, c)
-            prob_matrix[i][j] = total_lp
-            print("avg logprob per token      =", total_lp / len(per_tok_lp))
-            
-    
-    print("Average log prob: ", prob_matrix.mean())
-    print("Max log prob: ", prob_matrix.max())
-    print("Min log prob:", prob_matrix.min())
-            
+    for l in range(len(all_completions)):
+        prob_matrix = np.zeros((len(all_prompts[l]), len(all_completions[l])))
+        for i, p in enumerate(all_prompts[l]):
+            for j, c in enumerate(all_completions[l]):
+                print(i, j)
+                total_lp, per_tok_lp, tok_ids = logprob_completion_causal(model, tokenizer, p, c)
+                prob_matrix[i][j] = total_lp
+                print("avg logprob per token      =", total_lp / len(per_tok_lp))
+                
+        
+        print("Average log prob: ", prob_matrix.mean())
+        print("Max log prob: ", prob_matrix.max())
+        print("Min log prob:", prob_matrix.min())
+        
 
         
             
