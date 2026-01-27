@@ -8,6 +8,10 @@ from run_llama_dspy import PAPILLON
 from dspy.adapters import ChatAdapter
 import transformers
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+torch.cuda.empty_cache()
 
 @torch.no_grad()
 def logprob_completion_causal(
@@ -28,7 +32,7 @@ def logprob_completion_causal(
     
     prompt = tokenizer.decode(prompt)
     completion = tokenizer.decode(completion)
-    print(prompt, completion)
+    # print(prompt, completion)
 
     # Tokenize prompt and completion separately to precisely locate the boundary.
     prompt_enc = tokenizer(
@@ -88,7 +92,7 @@ def logprob_completion_causal(
 def run_papillon(prompt):
     inputs = dict(userQuery=prompt)
     adapter = ChatAdapter()
-    prompt_msgs = adapter.format(priv_prompt.prompt_creater.signature, demos=[], inputs=inputs)
+    prompt_msgs = adapter.format(priv_prompt.prompt_creater.named_parameters()[0][1].signature, demos=[], inputs=inputs)
     
     pipeline = transformers.pipeline(
         "text-generation",
@@ -106,21 +110,28 @@ def run_papillon(prompt):
 
 def completion_via_gliner():
     gliner_replace_csv = pandas.read_csv("../pupa/PUPA_TNB_ENG_replace.csv")
+    gliner_replace_csv = gliner_replace_csv.sample(n=20)
     original_queries = gliner_replace_csv["user_query"].tolist()
     replaced_queries = gliner_replace_csv["gliner_replace"].tolist()
     all_prompts = []
     all_completions = []
+    decoded_prompts, decoded_completions = [], []
     for i in range(len(original_queries)):
         orig = original_queries[i]
         repls = replaced_queries[i].split("|<SEP>|")
         curr_prompts, curr_completions = [], []
+        curr_decoded_prompts, curr_decoded_completions = [], []
         for r in [orig] + repls:
             prompt, comp = run_papillon(r)
             curr_prompts.append(prompt)
             curr_completions.append(comp)
+            curr_decoded_prompts.append(r)
+            curr_decoded_completions.append(tokenizer.decode(comp))
         all_prompts.append(curr_prompts)
         all_completions.append(curr_completions)
-    return all_prompts, all_completions
+        decoded_prompts.append(curr_decoded_prompts)
+        decoded_completions.append(curr_decoded_completions)
+    return all_prompts, all_completions, decoded_prompts, decoded_completions
 
 def completion_via_templates():
     template = "My name is {entity}. I am applying to a research internship at Microsoft Research. Please draft me a cover letter."
@@ -158,45 +169,53 @@ if __name__ == "__main__":
         quantization_config=quantization_config
     )
     # model = AutoModelForCausalLM.from_pretrained(model_name)
-    # model.to("cuda" if torch.cuda.is_available() else "cpu")
+    model.to("cuda" if torch.cuda.is_available() else "cpu")
+    torch.cuda.empty_cache()
     
     prompt_file = parse_model_prompt(model_name)
 
     openai_lm = dspy.LM(model="gpt-4o-mini", max_tokens=4000)
 
     priv_prompt = PAPILLON(openai_lm)
+    # print(priv_prompt.prompt_creater.named_parameters()[0][1])
+    # print(priv_prompt.prompt_creater.named_parameters()[0][1].signature)
     
-    priv_prompt.load(prompt_file, use_legacy_loading=True)
+    # priv_prompt.load(prompt_file, use_legacy_loading=True)
+    # priv_prompt.load(prompt_file)
 
     USE_TEMPLATES = False
     
     if USE_TEMPLATES:
         all_prompts, all_completions = completion_via_templates()
     else:
-        all_prompts, all_completions = completion_via_gliner()
+        all_prompts, all_completions, decoded_prompt, decoded_completions = completion_via_gliner()
+
+    import json
+    json.dump({"prompts": decoded_prompt, "completions": decoded_completions}, open("prompts_completions.json", "w+"))
         
     
     for l in range(len(all_completions)):
         prob_matrix = np.zeros((len(all_prompts[l]), len(all_completions[l])))
         for i, p in enumerate(all_prompts[l]):
             for j, c in enumerate(all_completions[l]):
-                print(i, j)
+                # print(i, j)
                 total_lp, per_tok_lp, tok_ids = logprob_completion_causal(model, tokenizer, p, c)
                 prob_matrix[i][j] = total_lp
-                print("avg logprob per token      =", total_lp / len(per_tok_lp))
+                # print("avg logprob per token      =", total_lp / len(per_tok_lp))
+
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(prob_matrix, annot=True, fmt=".2f", cmap="viridis", cbar_kws={"label": "Total log-prob"})
+        plt.title("Log-Probability Heatmap")
+        plt.xlabel("Completion index")
+        plt.ylabel("Prompt index")
+        plt.tight_layout()
+        plt.savefig(f"logprob_heatmap_{l}.png")
+        plt.close()
                 
         
-        print("Average log prob: ", prob_matrix.mean())
-        print("Max log prob: ", prob_matrix.max())
-        print("Min log prob:", prob_matrix.min())
+        # print("Average log prob: ", prob_matrix.mean())
+        # print("Max log prob: ", prob_matrix.max())
+        # print("Min log prob:", prob_matrix.min())
         
 
         
-            
-
-    # completion = " Paris is the capital of France."
-    # total_lp, per_tok_lp, tok_ids = logprob_completion_causal(model, tokenizer, prompt, completion)
-
-    # print("log P(completion | prompt) =", total_lp)
-    # print("avg logprob per token      =", total_lp / len(per_tok_lp))
-    # print("num completion tokens      =", len(per_tok_lp))
