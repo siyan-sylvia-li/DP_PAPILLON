@@ -13,6 +13,9 @@ import seaborn as sns
 
 torch.cuda.empty_cache()
 
+import random
+random.seed(42)
+
 @torch.no_grad()
 def logprob_completion_causal(
     model,
@@ -89,6 +92,13 @@ def logprob_completion_causal(
     return total_logprob, token_logprobs.detach().cpu().tolist(), comp_ids[0].cpu().tolist()
 
 
+def compute_deviation(logprob_matrix):
+    """Compute the column-wise standard deviation of a log-probability matrix."""
+    logprob_array = np.array(logprob_matrix)
+    std_devs = np.std(logprob_array, axis=0)
+    return np.mean(std_devs)
+
+
 def run_papillon(prompt):
     inputs = dict(userQuery=prompt)
     adapter = ChatAdapter()
@@ -110,7 +120,7 @@ def run_papillon(prompt):
 
 def completion_via_gliner():
     gliner_replace_csv = pandas.read_csv("../pupa/PUPA_TNB_ENG_replace.csv")
-    gliner_replace_csv = gliner_replace_csv.sample(n=20)
+    # gliner_replace_csv = gliner_replace_csv.sample(n=50)
     original_queries = gliner_replace_csv["user_query"].tolist()
     replaced_queries = gliner_replace_csv["gliner_replace"].tolist()
     all_prompts = []
@@ -131,7 +141,14 @@ def completion_via_gliner():
         all_completions.append(curr_completions)
         decoded_prompts.append(curr_decoded_prompts)
         decoded_completions.append(curr_decoded_completions)
-    return all_prompts, all_completions, decoded_prompts, decoded_completions
+    final_prompt_completions = []
+    for i, (p, c) in enumerate(zip(decoded_prompts, decoded_completions)):
+        final_prompt_completions.append({
+            "index": i,
+            "prompt_variants": p,
+            "completion_variants": c
+        })
+    return all_prompts, all_completions, final_prompt_completions
 
 def completion_via_templates():
     template = "My name is {entity}. I am applying to a research internship at Microsoft Research. Please draft me a cover letter."
@@ -157,8 +174,8 @@ def completion_via_templates():
 
 # --- Example usage ---
 if __name__ == "__main__":
-    model_name = "meta-llama/Llama-3.1-8B-Instruct"  # replace with your model
-    # model_name = "meta-llama/Llama-3.2-1B-Instruct"  # replace with your model
+    # model_name = "meta-llama/Llama-3.1-8B-Instruct"  # replace with your model
+    model_name = "meta-llama/Llama-3.2-3B-Instruct"  # replace with your model
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
@@ -188,11 +205,12 @@ if __name__ == "__main__":
     if USE_TEMPLATES:
         all_prompts, all_completions = completion_via_templates()
     else:
-        all_prompts, all_completions, decoded_prompt, decoded_completions = completion_via_gliner()
+        all_prompts, all_completions, final_prompt_completions = completion_via_gliner()
 
     import json
-    json.dump({"prompts": decoded_prompt, "completions": decoded_completions}, open("prompts_completions.json", "w+"))
-        
+    json.dump(final_prompt_completions, open("prompts_completions.json", "w+"))
+
+    deviation_factors = []
     
     for l in range(len(all_completions)):
         prob_matrix = np.zeros((len(all_prompts[l]), len(all_completions[l])))
@@ -203,19 +221,21 @@ if __name__ == "__main__":
                 prob_matrix[i][j] = total_lp
                 # print("avg logprob per token      =", total_lp / len(per_tok_lp))
 
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(prob_matrix, annot=True, fmt=".2f", cmap="viridis", cbar_kws={"label": "Total log-prob"})
-        plt.title("Log-Probability Heatmap")
-        plt.xlabel("Completion index")
-        plt.ylabel("Prompt index")
-        plt.tight_layout()
-        plt.savefig(f"logprob_heatmap_{l}.png")
-        plt.close()
-                
+        # plt.figure(figsize=(8, 6))
+        # sns.heatmap(prob_matrix, annot=True, fmt=".2f", cmap="viridis", cbar_kws={"label": "Total log-prob"})
+        # plt.title("Log-Probability Heatmap")
+        # plt.xlabel("Completion index")
+        # plt.ylabel("Prompt index")
+        # plt.tight_layout()
+        # plt.savefig(f"logprob_heatmap_{l}.png")
+        # plt.close()
+
+        deviation_factors.append(compute_deviation(prob_matrix))
         
         # print("Average log prob: ", prob_matrix.mean())
         # print("Max log prob: ", prob_matrix.max())
         # print("Min log prob:", prob_matrix.min())
         
+    print("Average deviation factors across examples:", sum(deviation_factors) / len(deviation_factors))
 
         
