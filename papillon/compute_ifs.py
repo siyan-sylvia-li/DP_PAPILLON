@@ -288,6 +288,7 @@ if __name__ == "__main__":
         curr_dt = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
         model_name_safe = args.model_name.replace("/", "_")
         file_name = f"{args.task}_{model_name_safe}_{curr_dt}.json"
+        FNAME = file_name
         
         
         full_prompts, full_completions = [], []
