@@ -241,7 +241,7 @@ if __name__ == "__main__":
 
     if args.use_vllm:
         from vllm import LLM
-        llm = LLM(model=args.model_name, dtype="bfloat16", enable_prefix_caching=True)
+        llm = LLM(model=args.model_name, dtype="float16", enable_prefix_caching=True)
         model = None
         pipeline = None
     else:
