@@ -3,6 +3,7 @@ from gliner import GLiNER
 import json
 import random
 import dspy
+from constants import MALE_NAME_LIST, FEMALE_NAME_LIST
 
 import dotenv
 dotenv.load_dotenv("../.env")
@@ -19,7 +20,7 @@ class DetermineQueryLanguage(dspy.Signature):
     language_judgment = dspy.OutputField(desc="Whether the query is COMPLETELY in English. Respond with yes or no.")
 
 
-labels = ["email", "phone_number", "user_name", "first_name", "last_name", "company_name", "url", "country", "city", "county"]
+labels = ["first_name"]
 
 NEMOTRON_PII_LEN = 99900
 
@@ -31,24 +32,13 @@ def swap_gliner_entities(text: str):
         return None
     entities = model.predict_entities(text, labels, threshold=0.85)
     entities = [e for e in entities if e["score"] > 0.9]
-    all_labels = [e["label"] for e in entities]
     all_swaps = []
     original_text = text
-    if "first_name" in all_labels and "last_name" in all_labels:
+    if len(entities):
         first_name = [e["text"] for e in entities if e["label"] == "first_name"][0]
-        last_name = [e["text"] for e in entities if e["label"] == "last_name"][0]
-        for _ in range(5):
-            found = False
-            retry_attempts = 0
-            while not found and retry_attempts < 10:
-                random_label = str(random.randint(0, NEMOTRON_PII_LEN))
-                if random_label in nemotron_labels["first_name"] and random_label in nemotron_labels["last_name"]:
-                    found = True
-                    text = original_text.replace(first_name, nemotron_labels["first_name"][random_label][0]).replace(last_name, nemotron_labels["last_name"][random_label][0])
-                    if qa_judge(original_user_query=original_text, modified_user_query=text).judgment.lower().startswith("no"):
-                        found = False
-                        retry_attempts += 1
-            if found:
+        for n in MALE_NAME_LIST + FEMALE_NAME_LIST:
+            text = original_text.replace(first_name, n)
+            if qa_judge(original_user_query=original_text, modified_user_query=text).judgment.lower().startswith("yes"):
                 all_swaps.append(text)
     if all_swaps:
         return "|<SEP>|".join(all_swaps)
@@ -58,7 +48,7 @@ def swap_gliner_entities(text: str):
 
 if __name__ == "__main__":
     nemotron_labels = json.load(open("nemotron_tags.json"))
-    eng_queries = pandas.read_csv("../pupa/PUPA_TNB_ENG.csv")
+    eng_queries = pandas.read_csv("../pupa/PUPA_New.csv")
 
     llm_5_nano = dspy.LM(model="openai/gpt-5-nano")
     dspy.configure(lm=llm_5_nano)
@@ -66,8 +56,7 @@ if __name__ == "__main__":
     qa_judge = dspy.Predict(QAReplacedQuery)
     
     
-    eng_queries = eng_queries.sample(n=200)
     eng_queries["gliner_replace"] = eng_queries["user_query"].map(swap_gliner_entities)
     
     eng_queries = eng_queries.loc[pandas.notna(eng_queries["gliner_replace"])]
-    eng_queries.to_csv("../pupa/PUPA_TNB_ENG_replace.csv")
+    eng_queries.to_csv("../pupa/PUPA_New_ENG_replace_full.csv")

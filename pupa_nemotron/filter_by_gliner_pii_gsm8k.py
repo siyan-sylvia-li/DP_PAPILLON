@@ -9,14 +9,7 @@ labels = ["first_name"]
 # 3. Load the PII model
 model = GLiNER.from_pretrained("nvidia/gliner-pii")
 
-male_name_list = [
-    "Liam", "Noah", "Oliver", "Elijah", "James", "William", "Benjamin", "Lucas", "Henry", "Alexander",
-    "Mason", "Michael", "Ethan", "Daniel", "Jacob", "Logan", "Jackson", "Levi", "Sebastian", "Mateo", "John"
-]
-female_name_list = [
-    "Olivia", "Emma", "Ava", "Sophia", "Isabella", "Mia", "Charlotte", "Amelia", "Harper", "Evelyn",
-    "Abigail", "Ella", "Scarlett", "Grace", "Chloe", "Victoria", "Riley", "Aria", "Lily", "Aurora", "Zoey"
-]
+from constants import MALE_NAME_LIST, FEMALE_NAME_LIST
 
 
 def predict_gliner_entities(text: str):
@@ -31,9 +24,9 @@ def predict_gliner_entities(text: str):
         # print(f"Multiple PIIs found: {piis} in text: {text}")
         return None, None
     if "she" in text.lower() or "her" in text.lower() or "hers" in text.lower():
-        return piis[0], random.choices(female_name_list, k=5)
+        return piis[0], FEMALE_NAME_LIST
     elif "he" in text.lower() or "him" in text.lower() or "his" in text.lower():
-        return piis[0], random.choices(male_name_list, k=5)
+        return piis[0], MALE_NAME_LIST
     return None, None
 
 if __name__ == "__main__":
