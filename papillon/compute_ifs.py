@@ -232,6 +232,9 @@ if __name__ == "__main__":
     parser.add_argument("--max_new_tokens", type=int, default=1000)
     parser.add_argument("--use_vllm", action="store_true", help="Use vllm for generation and logprob scoring.")
     parser.add_argument("--logprob_batch_size", type=int, default=32, help="Number of (prompt, completion) pairs per logprob scoring batch. Reduce if OOM.")
+    parser.add_argument("--max_model_len", type=int, default=None, help="Override max sequence length (vllm). Required for models with large defaults like Qwen3.")
+    parser.add_argument("--enforce_eager", action="store_true", help="Disable CUDA graphs and torch.compile in vllm. Slower but uses less memory during init.")
+    parser.add_argument("--dtype", type=str, default="bfloat16", choices=["bfloat16", "float16", "float32"], help="Model dtype. Note: gemma3 and some models require bfloat16.")
     args = parser.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
@@ -241,7 +244,15 @@ if __name__ == "__main__":
 
     if args.use_vllm:
         from vllm import LLM
-        llm = LLM(model=args.model_name, dtype="float16", enable_prefix_caching=True)
+        llm_kwargs = dict(
+            model=args.model_name,
+            dtype=args.dtype,
+            enable_prefix_caching=True,
+            enforce_eager=args.enforce_eager,
+        )
+        if args.max_model_len is not None:
+            llm_kwargs["max_model_len"] = args.max_model_len
+        llm = LLM(**llm_kwargs)
         model = None
         pipeline = None
     else:
