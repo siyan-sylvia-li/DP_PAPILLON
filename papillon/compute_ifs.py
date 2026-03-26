@@ -346,7 +346,10 @@ if __name__ == "__main__":
 
         # Build both raw and length-normalized matrices in a single pass.
         if args.use_vllm:
-            raw_matrix, norm_matrix = logprob_matrix_vllm(llm, tokenizer, full_prompts[l], full_completions[l], batch_size=args.logprob_batch_size, names=task_customizer.names[l])
+            if args.task == "GSM8k":
+                raw_matrix, norm_matrix = logprob_matrix_vllm(llm, tokenizer, full_prompts[l], full_completions[l], batch_size=args.logprob_batch_size, names=task_customizer.names[l])
+            else:
+                raw_matrix, norm_matrix = logprob_matrix_vllm(llm, tokenizer, full_prompts[l], full_completions[l], batch_size=args.logprob_batch_size)
         else:
             raw_matrix  = np.zeros((n, n))
             norm_matrix = np.zeros((n, n))
