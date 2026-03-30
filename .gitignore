@@ -5,3 +5,4 @@ papillon/*.csv
 pupa_nemotron/*.json
 papillon/grpo*/
 papillon/cache/*
+papillon/wandb/*
