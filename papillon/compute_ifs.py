@@ -145,6 +145,15 @@ def compute_rdd_and_ifs(logprob_matrix: np.ndarray):
     ifs = float(np.mean(rdd_scores))
     return ifs, rdd_scores
 
+def compute_empirical_epsilon(logprob_matrix: np.ndarray) -> float:
+    """
+    Column-wise max minus min — directly corresponds to empirical ε.
+    Entry [i,j] = log p(c_j | p_i).
+    """
+    col_max = logprob_matrix.max(axis=0)  # best prompt for each completion
+    col_min = logprob_matrix.min(axis=0)  # worst prompt for each completion
+    return float(np.mean(col_max - col_min))
+
 
 def run_prompts(prompts: list[str], pipeline, tokenizer, prompt_formatter, bsize=30) -> tuple[list[str], list[str]]:
     """
@@ -290,6 +299,7 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError("Not supported dataset")
     
+    # FNAME = "GSM8k__local-storage_interaction_siyanli_DP_PAPILLON_papillon_grpo_ifs_qwen_15b_inst_full_2026-03-29_17:39:14.json"
     FNAME = "DUMMY.json"
 
     import os
@@ -303,7 +313,9 @@ if __name__ == "__main__":
         
         
         full_prompts, full_completions = [], []
-        for p in tqdm.tqdm(task_customizer.data):
+        for _, p in tqdm.tqdm(task_customizer.data):
+            if _ > 300:
+                break
             if args.use_vllm:
                 curr_all_prompts, curr_all_completions = run_prompts_vllm(p, llm, tokenizer, task_customizer.format_prompt, args.max_new_tokens)
             else:

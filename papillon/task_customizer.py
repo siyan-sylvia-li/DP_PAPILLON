@@ -19,6 +19,7 @@ class PAPILLONCustomizer(TaskCustomizer):
     def __init__(self):
         super().__init__()
         self.adapter = ChatAdapter()
+        self.data_pii_dict = {}
         self.create_data()
     
     def format_prompt(self, text):
@@ -34,9 +35,14 @@ class PAPILLONCustomizer(TaskCustomizer):
         gliner_replace_csv = pandas.read_csv("../pupa/PUPA_New_ENG_replace_full.csv")
         original_queries    = gliner_replace_csv["user_query"].tolist()
         replaced_queries    = gliner_replace_csv["gliner_replace"].tolist()
+        piis = gliner_replace_csv["pii_units"].tolist()
+
         for i in range(len(original_queries)):
             curr_item = [original_queries[i]] + replaced_queries[i].split("|<SEP>|")
             self.data.append(curr_item)
+            self.data_pii_dict.update({
+                original_queries[i]: piis[i]
+            })
         print("PAPILLON Customizer Data Size:", len(self.data))
 
 
@@ -80,7 +86,8 @@ A: Let's think step by step."""
     
     def create_data(self):
         # original_question,pii,substitutes,original_answer
-        gsm8k_train = pandas.read_csv("../pupa_nemotron/gsm8k_train_gliner_pii.csv")
+        # gsm8k_train = pandas.read_csv("../pupa_nemotron/gsm8k_train_gliner_pii.csv")
+        gsm8k_train = pandas.read_csv("../pupa_nemotron/gsm8k_test_gliner_pii.csv")
         for i, row in gsm8k_train.iterrows():
             curr_item = [row["original_question"]]
             curr_pii = row["pii"]
